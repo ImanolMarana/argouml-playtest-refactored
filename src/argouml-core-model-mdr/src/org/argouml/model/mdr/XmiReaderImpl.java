@@ -155,266 +155,222 @@ class XmiReaderImpl implements XmiReader, UnknownElementsListener,
     }
 
     public Collection parse(InputSource inputSource, boolean readOnly)
-          throws UmlException {
+        throws UmlException {
+
         System.setProperty("javax.xml.transform.TransformerFactory",
-                "net.sf.saxon.TransformerFactoryImpl");
-      
+        "net.sf.saxon.TransformerFactoryImpl");
+
         Collection<RefObject> newElements = Collections.emptyList();
-      
-        String extentName = determineExtentName(inputSource);
-        UmlPackage extent =
-                (UmlPackage) modelImpl.createExtent(extentName, readOnly);
-        if (extent == null) {
-          LOG.log(Level.SEVERE, "Failed to create extent " + extentName);
-        }
-      
-        try {
-          LOG.log(Level.INFO, "Loading to extent {0} {1}",
-                  new Object[] {extentName, extent});
-          newElements = loadExtent(inputSource, extent, readOnly);
-      
-          if (unknownElement) {
-            modelImpl.deleteExtent(extent);
-            throw new XmiException("Unknown element in XMI file : "
-                    + unknownElementName);
-          }
-      
-          if (ignoredElementCount > 0) {
-            LOG.log(Level.WARNING, "Ignored one or more elements from list "
-                    + ignoredElements);
-          }
-      
-        } catch (MalformedXMIException e) {
-          handleMalformedXMIException(e, extent);
-        } catch (IOException e) {
-          handleIOException(e, extent);
-        }
-      
-        return newElements;
-      }
-      
-      private String determineExtentName(InputSource inputSource) {
+
         String extentBase = inputSource.getPublicId();
         if (extentBase == null) {
-          extentBase = inputSource.getSystemId();
+            extentBase = inputSource.getSystemId();
         }
         if (extentBase == null) {
-          extentBase = MDRModelImplementation.MODEL_EXTENT_NAME;
+            extentBase = MDRModelImplementation.MODEL_EXTENT_NAME;
         }
         String extentName = extentBase;
         UmlPackage extent =
-                (UmlPackage) modelImpl.getRepository().getExtent(extentName);
+            (UmlPackage) modelImpl.getRepository().getExtent(extentName);
         int serial = 1;
         while (extent != null) {
-          extentName = extentBase + " " + serial;
-          serial++;
-          extent = (UmlPackage) modelImpl.getRepository().getExtent(
-                  extentName);
+            extentName = extentBase + " " + serial;
+            serial++;
+            extent = (UmlPackage) modelImpl.getRepository().getExtent(
+                    extentName);
         }
-        return extentName;
-      }
-      
-      private Collection<RefObject> loadExtent(InputSource inputSource,
-              UmlPackage extent, boolean readOnly)
-              throws IOException, MalformedXMIException, UmlException {
-        InputConfig config = createInputConfig(inputSource, readOnly);
-        XMIReader xmiReader = createXMIReader(config);
-      
-        // Disable event delivery during model load
-        modelImpl.getModelEventPump().stopPumpingEvents();
-      
-        Collection<RefObject> newElements = Collections.emptyList();
+
+        extent = (UmlPackage) modelImpl.createExtent(extentName, readOnly);
+        if (extent == null) {
+            LOG.log(Level.SEVERE, "Failed to create extent " + extentName);
+        }
+
         try {
-          String systemId = inputSource.getSystemId();
-          inputSource = ensureRewindableInputSource(inputSource);
-          MDRepository repository = modelImpl.getRepository();
-          repository.beginTrans(true);
-      
-          try {
-            newElements = readElements(xmiReader, inputSource, systemId, extent);
-          } catch (MalformedXMIException e) {
-            handleInvalidXMI(repository, xmiReader, inputSource, systemId, extent);
-          }
-      
-          if (uml13) {
-            repository.endTrans(true);
-            repository.beginTrans(true);
-            resolver.clearIdMaps();
-            newElements = convertAndLoadUml13(inputSource.getSystemId(),
-                    extent, xmiReader, inputSource);
-          }
-      
-          repository.endTrans();
-        } catch (Throwable e) {
-          handleThrowableDuringLoad(e);
-        } finally {
-          modelImpl.getModelEventPump().startPumpingEvents();
-        }
-        return newElements;
-      }
-      
-      private Collection<RefObject> readElements(XMIReader xmiReader,
-              InputSource inputSource, String systemId, UmlPackage extent)
-              throws IOException, MalformedXMIException {
-        return xmiReader.read(inputSource.getByteStream(),
-                systemId, extent);
-      }
-      
-      private void handleInvalidXMI(MDRepository repository, XMIReader xmiReader,
-              InputSource inputSource, String systemId, UmlPackage extent)
-              throws IOException, MalformedXMIException {
-        repository.endTrans(true);
-        repository.beginTrans(true);
-        resolver.clearIdMaps();
-        inputSource = convertFromInvalidXMI(inputSource);
-        xmiReader.read(inputSource.getByteStream(),
-                systemId, extent);
-      }
-      
-      private InputSource ensureRewindableInputSource(InputSource inputSource)
-              throws IOException {
-        if (inputSource.getByteStream() != null
-                || inputSource.getCharacterStream() != null) {
-          File file = copySource(inputSource);
-          String systemId = file.toURI().toURL().toExternalForm();
-          String publicId = inputSource.getPublicId();
-          inputSource = new InputSource(systemId);
-          inputSource.setPublicId(publicId);
-        }
-        return inputSource;
-      }
-      
-      private InputConfig createInputConfig(InputSource inputSource, boolean readOnly) {
-        InputConfig config = new InputConfig();
-        config.setUnknownElementsListener(this);
-        config.setUnknownElementsIgnored(true);
-      
-        String pId = inputSource.getPublicId();
-        String sId = modelImpl.getPublic2SystemIds().get(pId);
-        if (sId != null) {
-          if (sId.equals(inputSource.getSystemId())) {
-            LOG.log(Level.INFO,
-                    "Attempt to reread profile - ignoring - "
+            LOG.log(Level.INFO, "Loading to extent {0} {1}", new Object[]{extentName, extent});
+
+            InputConfig config = new InputConfig();
+            config.setUnknownElementsListener(this);
+            config.setUnknownElementsIgnored(true);
+
+            String pId = inputSource.getPublicId();
+            String sId = modelImpl.getPublic2SystemIds().get(pId);
+            if (sId != null) {
+                if (sId.equals(inputSource.getSystemId())) {
+                    LOG.log(Level.INFO, "Attempt to reread profile - ignoring - "
                             + "publicId = \"" + pId + "\";  systemId = \""
                             + sId + "\".");
-            return null;
-          } else {
-            throw new UmlException(
-                    "Profile with the duplicate publicId "
+                    return Collections.emptySet();
+                } else {
+                    throw new UmlException("Profile with the duplicate publicId "
                             + "is being loaded! publicId = \"" + pId
                             + "\"; existing systemId = \""
                             + modelImpl.getPublic2SystemIds().get(pId)
                             + "\"; new systemId = \"" + sId + "\".");
-          }
-        }
-        resolver = createResolver(inputSource, config, readOnly);
-        config.setReferenceResolver(resolver);
-        config.setHeaderConsumer(this);
-        return config;
-      }
-      
-      private XmiReferenceResolverImpl createResolver(InputSource inputSource,
-              InputConfig config, boolean readOnly) {
-        return new XmiReferenceResolverImpl(new RefPackage[] {extent},
-                config, modelImpl.getObjectToId(),
-                modelImpl.getPublic2SystemIds(), modelImpl.getIdToObject(),
-                modelImpl.getSearchPath(),
-                readOnly,
-                inputSource.getPublicId(), inputSource.getSystemId(),
-                modelImpl);
-      }
-      
-      private XMIReader createXMIReader(InputConfig config)
-              throws MalformedXMIException {
-        XMIReader xmiReader =
-                XMIReaderFactory.getDefault().createXMIReader(config);
-      
-        // org/netbeans/lib/jmi/util/Logger.java
-        // This can be uses to disable logging.  Default output is
-        // System.err
-        // setProperty("org.netbeans.lib.jmi.Logger.fileName", "")
-        //              org.netbeans.mdr.Logger
-        //
-        // The property org.netbeans.lib.jmi.Logger controls the minimum
-        // severity level for logging
-      
-        // Turn off NetBeans logging to System.err
-        //            System.setProperty("org.netbeans.lib.jmi.Logger.fileName", "");
-        // Set minimum severity level for MDR
-        //            System.setProperty("org.netbeans.lib.jmi.Logger",
-        //                    Integer.toString(ErrorManager.INFORMATIONAL));
-        InputConfig config2 = (InputConfig) xmiReader.getConfiguration();
-        config2.setUnknownElementsListener(this);
-        config2.setUnknownElementsIgnored(true);
-        unknownElement = false;
-        uml13 = false;
-        ignoredElementCount = 0;
-        return xmiReader;
-      }
-      
-      private void handleThrowableDuringLoad(Throwable e)
-              throws MalformedXMIException, IOException {
-        // Roll back transaction to remove any partial results read
-        try {
-          modelImpl.getRepository().endTrans(true);
-        } catch (Throwable e2) {
-          // Ignore any error.  The transaction may already have
-          // been unwound as part of exception processing by MDR
-        }
-        if (e instanceof MalformedXMIException) {
-          throw (MalformedXMIException) e;
-        } else if (e instanceof IOException) {
-          throw (IOException) e;
-        } else {
-          // We shouldn't get here, but just in case...
-          // We want a wide exception catcher to make sure our
-          // transaction always gets ended
-          e.printStackTrace();
-          throw new MalformedXMIException();
-        }
-      }
-      
-      private void handleMalformedXMIException(MalformedXMIException e,
-              UmlPackage extent) throws XmiException {
-        // If we can find a nested SAX exception, it will have information
-        // on the line number, etc.
-        ErrorManager.Annotation[] annotations =
-                ErrorManager.getDefault().findAnnotations(e);
-        for (ErrorManager.Annotation annotation : annotations) {
-          Throwable throwable = annotation.getStackTrace();
-          if (throwable instanceof SAXParseException) {
-            SAXParseException spe = (SAXParseException) throwable;
-            throw new XmiException(spe.getMessage(), spe.getPublicId(),
-                    spe.getSystemId(), spe.getLineNumber(),
-                    spe.getColumnNumber(), e);
-          } else if (throwable instanceof SAXException) {
-            SAXException se = (SAXException) throwable;
-            Exception e1 = se.getException();
-            if (e1 instanceof org.argouml.model.XmiReferenceRuntimeException) {
-              String href =
-                      ((org.argouml.model.XmiReferenceRuntimeException) e1)
-                          .getReference();
-              throw new org.argouml.model.XmiReferenceException(href,
-                      e);
+                }
             }
-            throw new XmiException(se.getMessage(), se);
-          }
+            resolver = new XmiReferenceResolverImpl(new RefPackage[] {extent},
+                    config, modelImpl.getObjectToId(),
+                    modelImpl.getPublic2SystemIds(), modelImpl.getIdToObject(),
+                    modelImpl.getSearchPath(),
+                    readOnly,
+                    inputSource.getPublicId(), inputSource.getSystemId(),
+                    modelImpl);
+            config.setReferenceResolver(resolver);
+            config.setHeaderConsumer(this);
+
+            XMIReader xmiReader =
+                    XMIReaderFactory.getDefault().createXMIReader(config);
+
+            /*
+             * MDR has a hardcoded printStackTrace on all exceptions,
+             * even if they're caught, which is unsightly, so we handle
+             * unknown elements ourselves rather than letting MDR throw
+             * an exception for us to catch.
+             *
+             * org/netbeans/lib/jmi/util/Logger.java
+             *
+             * This can be uses to disable logging.  Default output is
+             * System.err
+             * setProperty("org.netbeans.lib.jmi.Logger.fileName", "")
+             *              org.netbeans.mdr.Logger
+             *
+             * The property org.netbeans.lib.jmi.Logger controls the minimum
+             * severity level for logging
+             */
+            // Turn off NetBeans logging to System.err
+//            System.setProperty("org.netbeans.lib.jmi.Logger.fileName", "");
+            // Set minimum severity level for MDR
+//            System.setProperty("org.netbeans.lib.jmi.Logger",
+//                    Integer.toString(ErrorManager.INFORMATIONAL));
+            InputConfig config2 = (InputConfig) xmiReader.getConfiguration();
+            config2.setUnknownElementsListener(this);
+            config2.setUnknownElementsIgnored(true);
+            unknownElement = false;
+            uml13 = false;
+            ignoredElementCount = 0;
+
+            // Disable event delivery during model load
+            modelImpl.getModelEventPump().stopPumpingEvents();
+
+            try {
+                String systemId = inputSource.getSystemId();
+                // If we've got a streaming input, copy it to make sure we'll
+                // be able to rewind it if necessary
+                if (inputSource.getByteStream() != null
+                        || inputSource.getCharacterStream() != null) {
+                    File file = copySource(inputSource);
+                    systemId = file.toURI().toURL().toExternalForm();
+                    String publicId = inputSource.getPublicId();
+                    inputSource = new InputSource(systemId);
+                    inputSource.setPublicId(publicId);
+                }
+                MDRepository repository = modelImpl.getRepository();
+
+                // Use a transaction to avoid the performance penalty (3x) of
+                // MDR's autocommit mode
+                repository.beginTrans(true);
+
+                // Issue 5816 : invalid XMI
+                try {
+                    newElements = xmiReader.read(inputSource.getByteStream(),
+                            systemId, extent);
+                } catch (MalformedXMIException e) {
+                    repository.endTrans(true);
+                    repository.beginTrans(true);
+                    resolver.clearIdMaps();
+                    inputSource = convertFromInvalidXMI(inputSource);
+                    newElements = xmiReader.read(inputSource.getByteStream(),
+                            systemId, extent);
+
+                }
+
+                // If a UML 1.3 file, attempt to upgrade it to UML 1.4
+                if (uml13) {
+                    // Roll back transaction from first attempt & start new one
+                    repository.endTrans(true);
+                    repository.beginTrans(true);
+
+                    // Clear the associated ID maps & reset starting collection
+                    resolver.clearIdMaps();
+
+                    newElements = convertAndLoadUml13(inputSource.getSystemId(),
+                            extent, xmiReader, inputSource);
+                }
+
+                // Commit our transaction
+                repository.endTrans();
+            } catch (Throwable e) {
+                // Roll back transaction to remove any partial results read
+                try {
+                    modelImpl.getRepository().endTrans(true);
+                } catch (Throwable e2) {
+                    // Ignore any error.  The transaction may already have
+                    // been unwound as part of exception processing by MDR
+                }
+                if (e instanceof MalformedXMIException) {
+                    throw (MalformedXMIException) e;
+                } else if (e instanceof IOException) {
+                    throw (IOException) e;
+                } else {
+                    // We shouldn't get here, but just in case...
+                    // We want a wide exception catcher to make sure our
+                    // transaction always gets ended
+                    e.printStackTrace();
+                    throw new MalformedXMIException();
+                }
+            } finally {
+                modelImpl.getModelEventPump().startPumpingEvents();
+            }
+
+            if (unknownElement) {
+                modelImpl.deleteExtent(extent);
+                throw new XmiException("Unknown element in XMI file : "
+                        + unknownElementName);
+            }
+
+            if (ignoredElementCount > 0) {
+                LOG.log(Level.WARNING, "Ignored one or more elements from list "
+                        + ignoredElements);
+            }
+
+        } catch (MalformedXMIException e) {
+            // If we can find a nested SAX exception, it will have information
+            // on the line number, etc.
+            ErrorManager.Annotation[] annotations =
+                ErrorManager.getDefault().findAnnotations(e);
+            for (ErrorManager.Annotation annotation : annotations) {
+                Throwable throwable = annotation.getStackTrace();
+                if (throwable instanceof SAXParseException) {
+                    SAXParseException spe = (SAXParseException) throwable;
+                    throw new XmiException(spe.getMessage(), spe.getPublicId(),
+                            spe.getSystemId(), spe.getLineNumber(),
+                            spe.getColumnNumber(), e);
+                } else if (throwable instanceof SAXException) {
+                    SAXException se = (SAXException) throwable;
+                    Exception e1 = se.getException();
+                    if (e1 instanceof org.argouml.model.XmiReferenceRuntimeException) {
+                        String href =
+                            ((org.argouml.model.XmiReferenceRuntimeException) e1)
+                                .getReference();
+                        throw new org.argouml.model.XmiReferenceException(href,
+                                e);
+                    }
+                    throw new XmiException(se.getMessage(), se);
+                }
+            }
+            modelImpl.deleteExtent(extent);
+            throw new XmiException(e);
+        } catch (IOException e) {
+            try {
+                modelImpl.deleteExtent(extent);
+            } catch (InvalidObjectException e2) {
+                // Ignore if the extent never got created or has been deleted
+            }
+            throw new XmiException(e);
         }
-        modelImpl.deleteExtent(extent);
-        throw new XmiException(e);
-      }
-      
-      private void handleIOException(IOException e, UmlPackage extent)
-              throws XmiException {
-        try {
-          modelImpl.deleteExtent(extent);
-        } catch (InvalidObjectException e2) {
-          // Ignore if the extent never got created or has been deleted
-        }
-        throw new XmiException(e);
-      }
-      
-      //Refactoring end
+
+        return newElements;
+    }
 
 
     private Collection<RefObject> convertAndLoadUml13(String systemId,
