@@ -384,7 +384,6 @@ class ModelManagementHelperMDRImpl implements ModelManagementHelper {
     }
 
 //Refactoring end
-    }
 
 
     public Object getElement (List<String> fullPath) {
