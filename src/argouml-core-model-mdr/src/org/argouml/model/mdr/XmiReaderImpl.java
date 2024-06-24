@@ -171,7 +171,7 @@ class XmiReaderImpl implements XmiReader, UnknownElementsListener,
         try {
           LOG.log(Level.INFO, "Loading to extent {0} {1}",
                   new Object[] {extentName, extent});
-          newElements = loadExtent(inputSource, extent);
+          newElements = loadExtent(inputSource, extent, readOnly);
       
           if (unknownElement) {
             modelImpl.deleteExtent(extent);
@@ -215,9 +215,9 @@ class XmiReaderImpl implements XmiReader, UnknownElementsListener,
       }
       
       private Collection<RefObject> loadExtent(InputSource inputSource,
-              UmlPackage extent)
+              UmlPackage extent, boolean readOnly)
               throws IOException, MalformedXMIException, UmlException {
-        InputConfig config = createInputConfig(inputSource);
+        InputConfig config = createInputConfig(inputSource, readOnly);
         XMIReader xmiReader = createXMIReader(config);
       
         // Disable event delivery during model load
@@ -284,7 +284,7 @@ class XmiReaderImpl implements XmiReader, UnknownElementsListener,
         return inputSource;
       }
       
-      private InputConfig createInputConfig(InputSource inputSource) {
+      private InputConfig createInputConfig(InputSource inputSource, boolean readOnly) {
         InputConfig config = new InputConfig();
         config.setUnknownElementsListener(this);
         config.setUnknownElementsIgnored(true);
@@ -307,14 +307,14 @@ class XmiReaderImpl implements XmiReader, UnknownElementsListener,
                             + "\"; new systemId = \"" + sId + "\".");
           }
         }
-        resolver = createResolver(inputSource, config);
+        resolver = createResolver(inputSource, config, readOnly);
         config.setReferenceResolver(resolver);
         config.setHeaderConsumer(this);
         return config;
       }
       
       private XmiReferenceResolverImpl createResolver(InputSource inputSource,
-              InputConfig config) {
+              InputConfig config, boolean readOnly) {
         return new XmiReferenceResolverImpl(new RefPackage[] {(UmlPackage) extent},
                 config, modelImpl.getObjectToId(),
                 modelImpl.getPublic2SystemIds(), modelImpl.getIdToObject(),
