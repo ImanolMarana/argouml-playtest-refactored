@@ -315,7 +315,7 @@ class XmiReaderImpl implements XmiReader, UnknownElementsListener,
       
       private XmiReferenceResolverImpl createResolver(InputSource inputSource,
               InputConfig config, boolean readOnly) {
-        return new XmiReferenceResolverImpl(new RefPackage[] {(UmlPackage) extent},
+        return new XmiReferenceResolverImpl(new RefPackage[] {extent},
                 config, modelImpl.getObjectToId(),
                 modelImpl.getPublic2SystemIds(), modelImpl.getIdToObject(),
                 modelImpl.getSearchPath(),
