@@ -255,20 +255,6 @@ class UmlHelperMDRImpl implements UmlHelper {
         list.remove(element);
         list.add(newIndex, element);
     }
-
-    private int newPosition(int index, int size, Direction direction) {
-        if (direction == Direction.DOWN) {
-            return index + 1;
-        } else if (direction == Direction.UP) {
-            return index - 1;
-        } else if (direction == Direction.TOP) {
-            return 0;
-        } else if (direction == Direction.BOTTOM) {
-            return size - 1;
-        } else {
-            return 0; 
-        }
-    }
 //Refactoring end
     
     /*
